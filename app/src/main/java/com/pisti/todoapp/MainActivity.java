@@ -3,13 +3,20 @@ package com.pisti.todoapp;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import android.app.DatePickerDialog;
 import android.app.Dialog;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.drawable.Drawable;
 import android.nfc.Tag;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -44,6 +51,8 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        //Required for notify the user
+        createNotificationChannel();
 
         //NumberPicker
         String [] minutes = new String [60];
@@ -62,7 +71,6 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         btPickDate.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Please note that use your package name here
                 com.pisti.todoapp.DatePicker mDatePickerDialogFragment;
                 mDatePickerDialogFragment = new com.pisti.todoapp.DatePicker();
                 mDatePickerDialogFragment.show(getSupportFragmentManager(), "DATE PICK");
@@ -73,19 +81,14 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         btnOk.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                //Get the values and send to the firebase
+                //Get the values and send to the db
                 final EditText todoName = findViewById(R.id.megnevezesText);
                 final NumberPicker prevAlert = findViewById(R.id.numberPicker);
-                //final DatePicker alertDate = findViewById(R.id.datePicker);
 
                 String name = todoName.getText().toString();
                 int mins = prevAlert.getValue();
-                SimpleDateFormat date = new SimpleDateFormat("yyyy-MM-dd");
-                //int year = tvDate
-                //int month = tv.getMonth();
-                //int day = alertDate.getDayOfMonth();
 
-                addToDB(name, tvDate.getText().toString(), mins);
+                addToDB(name, mins);
             }
         });
     }
@@ -101,16 +104,59 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         mCalendar.set(Calendar.DAY_OF_MONTH,dayOfMonth);
         // Get the date in form of string
         String selectedDate = DateFormat.getDateInstance(DateFormat.FULL).format(mCalendar.getTime());
+        setDate(year + "-" + month + "-" + dayOfMonth);
         // Set the textview to the selectedDate String
         tvDate.setText(selectedDate);
     }
 
-    
-    public void addToDB(String name, String date, int prevAlert) {
+    private final String CHANNEL_ID = "CHANNEL_ID_NOTIFICATION";
+    //Notification
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = getString(R.string.channel_name);
+            String description = getString(R.string.channel_description);
+            int importance = NotificationManager.IMPORTANCE_DEFAULT;
+            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
+            channel.setDescription(description);
+            //Register the channel
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            manager.createNotificationChannel(channel);
+        }
+    }
+
+    private void notifyUser(String title, String description) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.notification_icon)
+                .setContentTitle(title)
+                .setContentText(description)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true);
+
+        Intent intent = new Intent(this, NotificationActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+
+        //This can be called from an admin-like page
+        //Here notifies the user with the unique ID
+        //The ID should be stored if update or notification remove required.
+        NotificationManagerCompat.from(this)
+                .notify(1, builder.build());
+    }
+
+    private String date;
+    public String getDate() {
+        return date;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
+    }
+
+    public void addToDB(String name, int prevAlert) {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         HashMap<String, Object> todos = new HashMap<>();
         todos.put("name", name);
-        todos.put("time", date);
+        todos.put("time", getDate());
         todos.put("prevAlert", prevAlert);
 
         db.collection("todos")
