@@ -21,12 +21,15 @@ import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.NumberPicker;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -47,11 +50,14 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         createNotificationChannel();
 
         //NumberPicker
-        setNumberPicker();
+        setNumberPicker(0, 60, R.id.numberPicker);
 
         //DAtePicker
         setDatePicker();
 
+        //Hour, and minute picker
+        setNumberPicker(0, 24, R.id.HourPicker);
+        setNumberPicker(0, 60, R.id.MinutePicker);
 
         final Button btnOk = findViewById(R.id.btnOk);
         btnOk.setOnClickListener(new View.OnClickListener() {
@@ -63,30 +69,30 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
 
                 String name = todoName.getText().toString();
                 int mins = prevAlert.getValue();
-
-                notifyUser("Hello wörld", "Hello everibodi", mCalendar.getTime());
+                if (mCalendar != null) {
+                    notifyUser();
+                }
                 PostTODO(name, mins);
             }
         });
     }
 
-
-    private void setNumberPicker() {
-        String [] minutes = new String [60];
-        for(int i= 0;i<60;i++){
-            minutes[i] = String.valueOf(i);
+    private void setNumberPicker(int minValue, int maxValue, int ID) {
+        String [] values = new String [maxValue];
+        for(int i= minValue;i<maxValue;i++){
+            values[i] = String.valueOf(i);
         }
 
-        NumberPicker picker = (NumberPicker) findViewById(R.id.numberPicker);
-        picker.setMinValue(0);
-        picker.setMaxValue(59);
-        picker.setDisplayedValues(minutes);
+        NumberPicker picker = (NumberPicker) findViewById(ID);
+        picker.setMinValue(minValue);
+        picker.setMaxValue(maxValue-1);
+        picker.setDisplayedValues(values);
     }
 
     private void setDatePicker() {
         //https://www.geeksforgeeks.org/datepickerdialog-in-android/
         tvDate = findViewById(R.id.tvDate);
-        btPickDate = findViewById(R.id.btPickDate);
+        btPickDate = findViewById(R.id.btnPickDate);
         btPickDate.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -128,27 +134,38 @@ public class MainActivity extends AppCompatActivity implements DatePickerDialog.
         }
     }
 
-    private void notifyUser(String title, String description, Date delay) {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.notification_icon)
-                .setContentTitle(title)
-                .setContentText(description)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setAutoCancel(true);
-
-        Intent intent = new Intent(this, NotificationActivity.class);
+    private void notifyUser() {
+        Intent intent = new Intent(this, NotificationPublisher.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
 
-
-        AlarmManager alarmManager = (AlarmManager) getSystemService(Context. ALARM_SERVICE ) ;
+        AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE ) ;
         assert alarmManager != null;
-        alarmManager.set(AlarmManager.ELAPSED_REALTIME_WAKEUP , delay.getTime() , pendingIntent) ;
+
+        final NumberPicker prevAlert = findViewById(R.id.numberPicker);
+        long currentTime = System.currentTimeMillis();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        try {
+            Date d = sdf.parse(getDate());
+            NumberPicker hour = findViewById(R.id.HourPicker);
+            long h = hour.getValue() * 60 * 60 * 1000;
+            NumberPicker mins = findViewById(R.id.MinutePicker);
+            long m = mins.getValue() * 60 * 1000;
+            long alertTime = currentTime + m + h;
+
+            String text = "Alert set on\n" + getDate() + "\n" + hour.getValue() + ":" + mins.getValue();
+            Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+            alarmManager.set(AlarmManager.RTC_WAKEUP , alertTime , pendingIntent) ;
+        }
+        catch (ParseException e) {
+            e.printStackTrace();
+        }
         //This can be called from an admin-like page
         //Here notifies the user with the unique ID
         //The ID should be stored if update or notification remove required.
-        NotificationManagerCompat.from(this)
-                .notify(CHANNEL_ID.lastIndexOf(-1), builder.build());
+        //NotificationManagerCompat.from(this)
+        //        .notify(CHANNEL_ID.lastIndexOf(-1), builder.build());
+
     }
 
     private String date;
